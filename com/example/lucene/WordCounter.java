@@ -1,22 +1,22 @@
 package com.example.lucene;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Scanner;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
@@ -27,7 +27,6 @@ import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
@@ -40,65 +39,68 @@ import org.apache.lucene.util.BytesRef;
 
 public class WordCounter {
 
-	public static void main(String[] args) throws IOException, ParseException {
+	public static final String PROPERTY_INDEX_DIRECTORY = "indexDir";
+	public static final String PROPERTY_FILE = "config.properties";
+
+	private String indexDir;
+
+	public static void main(String[] args) throws IOException, org.apache.lucene.queryparser.classic.ParseException, ParseException {
 		// TODO Auto-generated method stub
-		String indexDir = "";
-		int auswahl;
-
-		///////////////////////////////////////////////////////////
-		// load the properties for index and data directories//////
-
-		Properties prop = new Properties();
-		InputStream input = null;
-
-		try {
-
-			input = new FileInputStream("config.properties");
-
-			// load a properties file
-			prop.load(input);
-
-			// get the property value and print it out
-			indexDir = prop.getProperty("indexDir");
-
-		} catch (IOException ex) {
-			ex.printStackTrace();
-		} finally {
-			if (input != null) {
-				try {
-					input.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-
-		//////////////////////////////////////////////////////
+		WordCounter wordCounter = new WordCounter();
+		wordCounter.loadProp();
+		
 		StandardAnalyzer analyzer = new StandardAnalyzer();
 		IndexWriterConfig config = new IndexWriterConfig(analyzer);
 
-		Directory dir = FSDirectory.open(Paths.get(indexDir));
+		Directory dir = FSDirectory.open(Paths.get(wordCounter.indexDir));
 		IndexReader reader = DirectoryReader.open(dir);
 		final Fields fields = MultiFields.getFields(reader);
 		final Iterator<String> iterator = fields.iterator();
 		IndexSearcher searcher = new IndexSearcher(reader);
+		
+		
 
-		System.out.println("Geben Sie Ihr Auswahl ein: ");
-		System.out.println("1. CSV Datei erstellen ");
-		System.out.println("2. Meta Information ausgeben ");
-		Scanner sc = new Scanner(System.in);
-		auswahl = sc.nextInt();
-		switch (auswahl) {
-		case 1:
-			createCSV(iterator, reader, analyzer, searcher);
-			break;
-		case 2:
-			printMetaInfo(reader);
-		}
-
+		wordCounter.parseCL(args, iterator, reader, analyzer, searcher);
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
 	}
 
-	static private void printMetaInfo(IndexReader reader) throws IOException {
+	// Konfigurationsdatei aufrufen
+	private void loadProp() throws IOException {
+		Properties prop = new Properties();
+		InputStream input = null;
+
+		input = new FileInputStream(PROPERTY_FILE);
+		prop.load(input);
+
+		indexDir = prop.getProperty(PROPERTY_INDEX_DIRECTORY);
+	}
+
+	// Kommandozeilenparameter parsen
+	private void parseCL(String[] args, Iterator<String> iterator, IndexReader reader, StandardAnalyzer analyzer,
+			IndexSearcher searcher) throws IOException, ParseException, org.apache.lucene.queryparser.classic.ParseException {
+		Options options = new Options();
+		options.addOption("c", false, "CSV-Datei erstellen");
+		options.addOption("m", false, "Metainformationen ausgeben");
+		CommandLineParser parser = new DefaultParser();
+		CommandLine cmd = parser.parse(options, args);
+
+		if (cmd.hasOption("c")) {
+			createCSV(iterator, reader, analyzer, searcher);
+		} else if(cmd.hasOption("m")) {
+			printMetaInfo(reader);
+		}
+	}
+
+	private void printMetaInfo(IndexReader reader) throws IOException {
 		String fileName, title, author, size, date, encoding, terms;
 		Bits liveDocs = MultiFields.getLiveDocs(reader);
 		IndexableField body;
@@ -157,7 +159,7 @@ public class WordCounter {
 	}
 
 	static private void createCSV(Iterator<String> iterator, IndexReader reader, StandardAnalyzer analyzer,
-			IndexSearcher searcher) throws IOException, ParseException {
+			IndexSearcher searcher) throws IOException, org.apache.lucene.queryparser.classic.ParseException {
 		BufferedWriter writer = new BufferedWriter(new FileWriter("word_counter.csv"));
 		String freqTerm = "";
 		String tmp;
@@ -167,26 +169,23 @@ public class WordCounter {
 		ScoreDoc[] hits;
 		List<String> fileNames;
 		/*
-		List<String> blacklist = new ArrayList<>();
-		List<String> whitelist = new ArrayList<>();
-		List<String> list = new ArrayList<>();
-		
-		File blacklistFile = new File("E:\\DevTools\\Eclipse\\workspace\\LuceneWordCounter\\blacklist.txt");
-		if(blacklistFile.exists()) {
-			getBlacklistFromText(blacklistFile,blacklist);
-			//list = blacklist;
-		}
-		
-		File whitelistFile = new File("E:\\DevTools\\Eclipse\\workspace\\LuceneWordCounter\\whitelist.txt");
-		if(whitelistFile.exists()) {
-			getWhitelistFromText(whitelistFile,whitelist);
-			//list = whitelist;
-		}
-		
-		System.out.println("Blacklist size: " + blacklist.size());
-		System.out.println("Whitelist size: " + whitelist.size());
-
-		*/
+		 * List<String> blacklist = new ArrayList<>(); List<String> whitelist = new
+		 * ArrayList<>(); List<String> list = new ArrayList<>();
+		 * 
+		 * File blacklistFile = new
+		 * File("E:\\DevTools\\Eclipse\\workspace\\LuceneWordCounter\\blacklist.txt");
+		 * if(blacklistFile.exists()) { getBlacklistFromText(blacklistFile,blacklist);
+		 * //list = blacklist; }
+		 * 
+		 * File whitelistFile = new
+		 * File("E:\\DevTools\\Eclipse\\workspace\\LuceneWordCounter\\whitelist.txt");
+		 * if(whitelistFile.exists()) { getWhitelistFromText(whitelistFile,whitelist);
+		 * //list = whitelist; }
+		 * 
+		 * System.out.println("Blacklist size: " + blacklist.size());
+		 * System.out.println("Whitelist size: " + whitelist.size());
+		 * 
+		 */
 		final String field = "contents";
 		final Terms terms = MultiFields.getTerms(reader, field);
 		final TermsEnum it = terms.iterator();
@@ -206,54 +205,33 @@ public class WordCounter {
 					tmp += fileName + " ";
 				}
 				/*
-				tmp += ";";
-
-				// add blacklist flag to word
-				if(blacklist.size() > 0) {
-					for(String bl : blacklist) {
-						if(freqTerm.equals(bl)) {
-							 tmp += "blacklist";
-							    System.out.println("Blacklist found");
-								System.out.println("FreqTerm: " + freqTerm);
-								System.out.println(tmp);
-						}
-					}
-				}
-				
-				// add blacklist flag to word
-				if(whitelist.size() > 0) {
-					for(String wh : whitelist) {
-						if(freqTerm.equals(wh)) {
-							 tmp += "whitelist";
-							    System.out.println("Whitelist found");
-								System.out.println("FreqTerm: " + freqTerm);
-								System.out.println(tmp);
-						}
-					}
-				}
-				
-				/*
-				for (String s : list) {
-					if (freqTerm.equals(s)) {
-						if(blacklist.size() > 0) {
-						   
-						}
-						if(whitelist.size() > 0) {
-						    tmp += "whitelist";
-						    System.out.println("Whitelist found");
-							System.out.println("FreqTerm: " + freqTerm);
-							System.out.println(tmp);
-						}
-					}
-				}
-				*/
+				 * tmp += ";";
+				 * 
+				 * // add blacklist flag to word if(blacklist.size() > 0) { for(String bl :
+				 * blacklist) { if(freqTerm.equals(bl)) { tmp += "blacklist";
+				 * System.out.println("Blacklist found"); System.out.println("FreqTerm: " +
+				 * freqTerm); System.out.println(tmp); } } }
+				 * 
+				 * // add blacklist flag to word if(whitelist.size() > 0) { for(String wh :
+				 * whitelist) { if(freqTerm.equals(wh)) { tmp += "whitelist";
+				 * System.out.println("Whitelist found"); System.out.println("FreqTerm: " +
+				 * freqTerm); System.out.println(tmp); } } }
+				 * 
+				 * /* for (String s : list) { if (freqTerm.equals(s)) { if(blacklist.size() > 0)
+				 * {
+				 * 
+				 * } if(whitelist.size() > 0) { tmp += "whitelist";
+				 * System.out.println("Whitelist found"); System.out.println("FreqTerm: " +
+				 * freqTerm); System.out.println(tmp); } } }
+				 */
 
 				writer.write(tmp);
 				writer.newLine();
 			}
 			term = it.next();
 		}
-		
+		System.out.println("CSV Created");
+
 	}
 
 	static private String validate(String string) throws IOException {
@@ -268,7 +246,7 @@ public class WordCounter {
 	}
 
 	static private ScoreDoc[] searchTerm(StandardAnalyzer analyzer, IndexReader reader, IndexSearcher searcher,
-			String term) throws ParseException, IOException {
+			String term) throws IOException, org.apache.lucene.queryparser.classic.ParseException {
 		// Query q = new QueryParser("terms", analyzer).parse(term);
 		Query q = new QueryParser("contents", analyzer).parse(term);
 
@@ -300,37 +278,30 @@ public class WordCounter {
 	}
 
 	/*
-	static private void getBlacklistFromText(File file,List<String> blacklist) throws IOException {
-
-		List<String> lineString = new ArrayList<>();
-
-		BufferedReader br = new BufferedReader(new FileReader(file));
-		String line;
-		while ((line = br.readLine()) != null) {
-			lineString.add(line);
-			// System.out.println("Line: " + line);
-		}
-
-		for (String str : lineString) {
-			blacklist.addAll(Arrays.asList(str.split(";")));
-		}
-
-	}
-	
-	static private void getWhitelistFromText(File file,List<String> whitelist) throws IOException {
-		List<String> lineString = new ArrayList<>();
-
-		BufferedReader br = new BufferedReader(new FileReader(file));
-		String line;
-		while ((line = br.readLine()) != null) {
-			lineString.add(line);
-		}
-
-		for (String str : lineString) {
-			whitelist.addAll(Arrays.asList(str.split(";")));
-		}
-
-	}
-	*/
+	 * static private void getBlacklistFromText(File file,List<String> blacklist)
+	 * throws IOException {
+	 * 
+	 * List<String> lineString = new ArrayList<>();
+	 * 
+	 * BufferedReader br = new BufferedReader(new FileReader(file)); String line;
+	 * while ((line = br.readLine()) != null) { lineString.add(line); //
+	 * System.out.println("Line: " + line); }
+	 * 
+	 * for (String str : lineString) {
+	 * blacklist.addAll(Arrays.asList(str.split(";"))); }
+	 * 
+	 * }
+	 * 
+	 * static private void getWhitelistFromText(File file,List<String> whitelist)
+	 * throws IOException { List<String> lineString = new ArrayList<>();
+	 * 
+	 * BufferedReader br = new BufferedReader(new FileReader(file)); String line;
+	 * while ((line = br.readLine()) != null) { lineString.add(line); }
+	 * 
+	 * for (String str : lineString) {
+	 * whitelist.addAll(Arrays.asList(str.split(";"))); }
+	 * 
+	 * }
+	 */
 
 }
